@@ -165,7 +165,7 @@ class AuthenticationController extends Controller
                         $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS user has been authenticated against owncloud.");
 
                         # Reset cookie
-                        setcookie("user_cas_redirect_url", '/', null, '/');
+                        setcookie("user_cas_redirect_url", '/', 0, '/');
 
                         return new RedirectResponse($location);
                     } else { # Not authenticated against owncloud
@@ -191,7 +191,7 @@ class AuthenticationController extends Controller
             $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS user is already authenticated against owncloud.");
 
             # Reset cookie
-            setcookie("user_cas_redirect_url", '/', null, '/');
+            setcookie("user_cas_redirect_url", '/', 0, '/');
 
             return new RedirectResponse($location);
         }

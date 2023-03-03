@@ -56,19 +56,15 @@ if (\OCP\App::isEnabled($c->getAppName()) && !\OC::$CLI) {
                 $c->query('UserHooks')->register();
 
                 // URL params and redirect_url cookie
-                setcookie("user_cas_enforce_authentication", "0", null, '/');
+                setcookie("user_cas_enforce_authentication", "0", 0, '/');
                 $urlParams = '';
 
                 if (isset($_REQUEST['redirect_url'])) {
 
                     $urlParams = $_REQUEST['redirect_url'];
                     // Save the redirect_rul to a cookie
-                    $cookie = setcookie("user_cas_redirect_url", "$urlParams", null, '/');
-                }/*
-                else {
-
-                    setcookie("user_cas_redirect_url", '/', null, '/');
-                }*/
+                    $cookie = setcookie("user_cas_redirect_url", "$urlParams", 0, '/');
+                }
 
                 // Register alternative LogIn
                 $appService->registerLogIn();
@@ -88,7 +84,7 @@ if (\OCP\App::isEnabled($c->getAppName()) && !\OC::$CLI) {
                     $loggingService = $c->query("LoggingService");
 
                     $loggingService->write(LoggingService::DEBUG, 'Enforce Authentication was: ' . $isEnforced);
-                    setcookie("user_cas_enforce_authentication", '1', null, '/');
+                    setcookie("user_cas_enforce_authentication", '1', 0, '/');
 
                     // Initialize app
                     if (!$appService->isCasInitialized()) {
@@ -101,7 +97,7 @@ if (\OCP\App::isEnabled($c->getAppName()) && !\OC::$CLI) {
 
                             $loggingService->write(LoggingService::DEBUG, 'Enforce Authentication was on and phpCAS is not authenticated. Redirecting to CAS Server.');
 
-                            $cookie = setcookie("user_cas_redirect_url", urlencode($requestUri), null, '/');
+                            $cookie = setcookie("user_cas_redirect_url", urlencode($requestUri), 0, '/');
 
                             header("Location: " . $appService->linkToRouteAbsolute($c->getAppName() . '.authentication.casLogin'));
                             die();

@@ -404,7 +404,7 @@ class UserHooks
             $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, 'phpCAS logging out.');
 
             # Reset cookie
-            setcookie("user_cas_redirect_url", '/', null, '/');
+            setcookie("user_cas_redirect_url", '/', 0, '/');
 
             \phpCAS::logout(array("service" => $this->appService->getAbsoluteURL('/')));
 
