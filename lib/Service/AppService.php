@@ -298,14 +298,15 @@ class AppService
                     \phpCAS::setVerbose(TRUE);
                 }
 
+				$serviceBasedUrl = $this->getServiceBasedUrl();
 
                 # Initialize client
                 if ($this->casUseProxy) {
 
-                    \phpCAS::proxy($this->casVersion, $this->casHostname, intval($this->casPort), $this->casPath);
+                    \phpCAS::proxy($this->casVersion, $this->casHostname, (int)($this->casPort), $this->casPath, $serviceBasedUrl);
                 } else {
 
-                    \phpCAS::client($this->casVersion, $this->casHostname, intval($this->casPort), $this->casPath);
+                    \phpCAS::client($this->casVersion, $this->casHostname, (int)($this->casPort), $this->casPath, $serviceBasedUrl);
                 }
 
                 # Handle SingleSignout requests
@@ -466,7 +467,6 @@ class AppService
                 $this->casInitialized = TRUE;
 
                 $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS has been successfully initialized.");
-                #\OCP\Util::writeLog('cas', "phpCAS has been successfully initialized.", \OCA\UserCas\Service\LoggingService::DEBUG);
 
             } catch (\CAS_Exception $e) {
 
@@ -475,14 +475,12 @@ class AppService
                 $this->casInitialized = FALSE;
 
                 $this->loggingService->write(\OCA\UserCas\Service\LoggingService::ERROR, "phpCAS has thrown an exception with code: " . $e->getCode() . " and message: " . $e->getMessage() . ".");
-                #\OCP\Util::writeLog('cas', "phpCAS has thrown an exception with code: " . $e->getCode() . " and message: " . $e->getMessage() . ".", \OCA\UserCas\Service\LoggingService::ERROR);
             }
         } else {
 
             $this->casInitialized = TRUE;
 
             $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS has already been initialized.");
-            #\OCP\Util::writeLog('cas', "phpCAS has already been initialized.", \OCA\UserCas\Service\LoggingService::DEBUG);
         }
     }
 
@@ -1013,5 +1011,16 @@ class AppService
     public function getCasPath()
     {
         return $this->casPath;
+    }
+
+    private function getServiceBasedUrl(): string {
+        $httpProtocol = \OC::$server->getConfig()->getSystemValue('overwriteprotocol', 'https');
+        $currentUrl = $_SERVER['SERVER_NAME'];
+
+        if (!strpos($currentUrl, ':') && (int)$_SERVER['SERVER_PORT'] !== 80) {
+            $currentUrl .= ':' . $_SERVER['SERVER_PORT'];
+        }
+
+        return $httpProtocol . "://" . $currentUrl;
     }
 }

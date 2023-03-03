@@ -195,7 +195,7 @@ style('user_cas', 'settings');
                         id="cas_protected_groups" name="cas_protected_groups"
                         value="<?php p($_['cas_protected_groups']); ?>"
                         placeholder="group1,group2,group3"
-                        title="<?php p($l->t('Multivalued field, use comma to separate values')); ?>"/> <span class="csh"><?php p($l->t('Groups that will not be unlinked from the user when sync the CAS server and the owncloud')); ?></span></p>
+                        title="<?php p($l->t('Multivalued field, use comma to separate values')); ?>"/> <span class="csh"><?php p($l->t('Groups that will not be unlinked from the user when sync the CAS server and the NextCloud')); ?></span></p>
             <p><label
                         for="cas_default_group"><?php p($l->t('Default Group')); ?></label><input
                         id="cas_default_group" name="cas_default_group"
@@ -206,7 +206,7 @@ style('user_cas', 'settings');
                         id="cas_access_allow_groups" name="cas_access_allow_groups"
                         value="<?php p($_['cas_access_allow_groups']); ?>"
                         placeholder="group1,group2,group3"
-                        title="<?php p($l->t('Multivalued field, use comma to separate values')); ?>"/> <span class="csh"><?php p($l->t('Users in the following groups will be able to log into ownCloud, users not in one of the groups will be logged out immediately')); ?></span></p>
+                        title="<?php p($l->t('Multivalued field, use comma to separate values')); ?>"/> <span class="csh"><?php p($l->t('Users in the following groups will be able to log into NextCloud, users not in one of the groups will be logged out immediately')); ?></span></p>
             <p><label
                         for="cas_access_group_quotas"><?php p($l->t('Group Quotas')); ?></label><input
                         id="cas_access_group_quotas" name="cas_access_group_quotas"
@@ -255,13 +255,8 @@ style('user_cas', 'settings');
                        for="cas_ecas_request_full_userdetails"><?php p($l->t('Request full user details?')); ?></label>
             </p>
             <p><label for="cas_ecas_accepted_strengths"><?php p($l->t('ECAS Strength')); ?></label>
-                <select id="cas_ecas_accepted_strengths" name="cas_ecas_accepted_strengths">
-                    <?php $strength = $_['cas_ecas_accepted_strengths']; ?>
-                    <option value="" <?php echo $strength === '' ? 'selected' : ''; ?>><?php p($l->t('Not set')); ?></option>
-                    <option value="BASIC" <?php echo $strength === 'BASIC' ? 'selected' : ''; ?>>BASIC</option>
-                    <option value="MEDIUM" <?php echo $strength === 'MEDIUM' ? 'selected' : ''; ?>>MEDIUM</option>
-                    <option value="HIGH" <?php echo $strength === 'HIGH' ? 'selected' : ''; ?>>HIGH</option>
-                </select>
+                <input id="cas_ecas_accepted_strengths" name="cas_ecas_accepted_strengths" placeholder=""
+                        value="<?php p($_['cas_ecas_accepted_strengths']); ?>"> <span class="csh"><?php p($l->t('Multiple values separated by comma can be added. i.e. \'PASSWORD_SMS,PASSWORD_TOKEN,STRONG,PASSWORD_MOBILE_APP\'')); ?></span>
             </p>
             <p><label for="cas_ecas_assurance_level"><?php p($l->t('ECAS AssuranceLevel')); ?></label>
                 <select id="cas_ecas_assurance_level" name="cas_ecas_assurance_level">
