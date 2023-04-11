@@ -31,7 +31,7 @@ $c = $app->getContainer();
 
 $requestUri = (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '');
 
-if (\OCP\App::isEnabled($c->getAppName()) && !\OC::$CLI) {
+if (\OC_App::isEnabled($c->getAppName()) && !\OC::$CLI) {
 
     /** @var UserService $userService */
     $userService = $c->query('UserService');
