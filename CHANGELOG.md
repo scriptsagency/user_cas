@@ -1,6 +1,13 @@
 CHANGELOG
 =========
 
+Version 1.11.0
+--------------
+
+* Add compatibility up to Nextcloud 25 with PHP 8.1
+* Bumps phpCAS library to 1.6.1
+
+
 Version 1.10.0
 --------------
 
