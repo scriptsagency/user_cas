@@ -1,18 +1,17 @@
 {
-  "name": "felixrupp/user_cas",
-  "description": "This is the package for Ownclouds 3rd Party App user_cas",
+  "name": "scriptsagency/user_cas",
+  "description": "This is the package for Nextcloud 3rd Party App user_cas",
   "minimum-stability": "stable",
   "license": "AGPL-3.0-or-later",
   "authors": [
     {
-      "name": "Felix Rupp",
-      "email": "kontakt@felixrupp.com"
+      "name": "Adrian Marina",
+      "email": "scriptsagency@gmail.com"
     }
   ],
   "require": {
-    "jasig/phpcas": "^1.6.1",
-    "ec-europa/ecas-phpcas-parser": "^0.3",
-    "php": "^8.1",
+    "apereo/phpcas": "^1.6.1",
+    "php": "^8.4",
     "ext-json": "*"
   }
 }

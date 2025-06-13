@@ -8,6 +8,7 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Interface ImporterInterface
+ *
  * @package OCA\UserCAS\Service\Import
  *
  * @author Felix Rupp <kontakt@felixrupp.com>
@@ -15,20 +16,19 @@ use Psr\Log\LoggerInterface;
  *
  * @since 1.0.0
  */
-interface ImporterInterface
-{
+interface ImporterInterface {
 
-    /**
-     * @param LoggerInterface $logger
-     */
-    public function init(LoggerInterface $logger);
+  /**
+   * @param LoggerInterface $logger
+   */
+  public function init(LoggerInterface $logger);
 
-    public function close();
+  public function close();
 
-    public function getUsers();
+  public function getUsers();
 
-    /**
-     * @param array $userData
-     */
-    public function exportAsCsv(array $userData);
+  /**
+   * @param array $userData
+   */
+  public function exportAsCsv(array $userData);
 }

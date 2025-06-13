@@ -23,8 +23,7 @@
 
 namespace OCA\UserCAS\Service;
 
-use \OCP\IConfig;
-use \OCP\ILogger;
+use Psr\Log\LoggerInterface;
 
 /**
  * Class LoggingService
@@ -36,66 +35,53 @@ use \OCP\ILogger;
  *
  * @since 1.5.0
  */
-class LoggingService
-{
+class LoggingService {
 
-    /**
-     * @since 1.6.1
-     */
-    const DEBUG = 0;
-    /**
-     * @since 1.6.1
-     */
-    const INFO = 1;
-    /**
-     * @since 1.6.1
-     */
-    const WARN = 2;
-    /**
-     * @since 1.6.1
-     */
-    const ERROR = 3;
-    /**
-     * @since 1.6.1
-     */
-    const FATAL = 4;
+  /**
+   * @since 1.6.1
+   */
+  public const int DEBUG = 0;
 
-    /**
-     * @var string $appName
-     */
-    private $appName;
+  /**
+   * @since 1.6.1
+   */
+  public const int INFO = 1;
 
-    /**
-     * @var \OCP\IConfig $appConfig
-     */
-    private $config;
+  /**
+   * @since 1.6.1
+   */
+  public const int WARN = 2;
 
-    /**
-     * @var \OCP\ILogger $logger
-     */
-    private $logger;
+  /**
+   * @since 1.6.1
+   */
+  public const int ERROR = 3;
 
-    /**
-     * LoggingService constructor.
-     * @param string $appName
-     * @param \OCP\IConfig $config
-     * @param \OCP\ILogger $logger
-     */
-    public function __construct($appName, IConfig $config, ILogger $logger)
-    {
+  /**
+   * @since 1.6.1
+   */
+  public const int FATAL = 4;
 
-        $this->appName = $appName;
-        $this->config = $config;
-        $this->logger = $logger;
-    }
+  private string $appName;
+  private LoggerInterface $logger;
 
-    /**
-     * @param mixed $level
-     * @param string $message
-     */
-    public function write($level, $message)
-    {
+  /**
+   * LoggingService constructor.
+   *
+   * @param string $appName
+   * @param LoggerInterface $logger
+   */
+  public function __construct(string $appName, LoggerInterface $logger) {
+    $this->appName = $appName;
+    $this->logger = $logger;
+  }
 
-        $this->logger->log($level, $message, ['app' => $this->appName]);
-    }
+  /**
+   * @param mixed $level
+   * @param string $message
+   */
+  public function write(mixed $level, string $message): void {
+
+    $this->logger->log($level, $message, ['app' => $this->appName]);
+  }
 }

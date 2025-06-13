@@ -35,7 +35,7 @@ style('user_cas', 'settings');
             <li><a href="#casSettings-3"><?php p($l->t('Mapping')); ?></a></li>
             <li><a href="#casSettings-4"><?php p($l->t('Groups')); ?></a></li>
             <li><a href="#casSettings-5"><?php p($l->t('ECAS Settings')); ?></a></li>
-            <li><a href="#casSettings-6"><?php p($l->t('Import CLI')); ?></a></li>
+<!--            <li><a href="#casSettings-6">--><?php //p($l->t('Import CLI')); ?><!--</a></li>-->
             <li><a href="#casSettings-7"><?php p($l->t('phpCAS Library')); ?></a></li>
         </ul>
         <!-- CAS Server Settings -->
@@ -282,145 +282,7 @@ style('user_cas', 'settings');
             </p>
         </fieldset>
         <!-- Import-CLI Settings -->
-        <fieldset id="casSettings-6">
-
-            <h3><?php p($l->t('ActiveDirectory (LDAP)')); ?>:</h3>
-
-            <p><label for="cas_import_ad_host"><?php p($l->t('LDAP Host')); ?></label>
-                <select id="cas_import_ad_protocol" name="cas_import_ad_protocol">
-                    <?php $importAdProtocol = $_['cas_import_ad_protocol']; ?>
-                    <option value="ldaps://" <?php echo $importAdProtocol === 'ldaps://' ? 'selected' : ''; ?>>ldaps://</option>
-                    <option value="ldap://" <?php echo $importAdProtocol === 'ldap://' ? 'selected' : ''; ?>>ldap://</option>
-
-                </select>
-                <input
-                        id="cas_import_ad_host"
-                        name="cas_import_ad_host"
-                        value="<?php p($_['cas_import_ad_host']); ?>" placeholder="ldap.mydomain.com"/>
-                :
-                <input
-                        id="cas_import_ad_port"
-                        name="cas_import_ad_port"
-                        value="<?php p($_['cas_import_ad_port']); ?>" placeholder="636"/>
-            </p>
-            <p><label for="cas_import_ad_user"><?php p($l->t('LDAP User and Domain')); ?></label>
-                <input
-                        id="cas_import_ad_user"
-                        name="cas_import_ad_user"
-                        value="<?php p($_['cas_import_ad_user']); ?>" placeholder="admin"/>
-                @
-                <input
-                        id="cas_import_ad_domain"
-                        name="cas_import_ad_domain"
-                        value="<?php p($_['cas_import_ad_domain']); ?>" placeholder="ldap.mydomain.com"/>
-            </p>
-            <p><label for="cas_import_ad_password"><?php p($l->t('LDAP User Password')); ?></label>
-                <input
-                        type="password"
-                        id="cas_import_ad_password"
-                        name="cas_import_ad_password"/>
-            </p>
-            <p><label for="cas_import_ad_base_dn"><?php p($l->t('LDAP Base DN')); ?></label>
-                <input
-                        id="cas_import_ad_base_dn"
-                        name="cas_import_ad_base_dn"
-                        value="<?php p($_['cas_import_ad_base_dn']); ?>" placeholder="OU=People,DC=mydomain,DC=com"/>
-            </p>
-            <p><label for="cas_import_ad_sync_filter"><?php p($l->t('LDAP Sync Filter')); ?></label>
-                <input
-                        id="cas_import_ad_sync_filter"
-                        name="cas_import_ad_sync_filter"
-                        value="<?php print_unescaped($_['cas_import_ad_sync_filter']); ?>" placeholder="(&(objectCategory=user)(objectClass=user)(memberof:1.2.840.113556.1.4.1941:=CN=owncloudusers,CN=Users,DC=mydomain,DC=com))"/>
-            </p>
-            <p><label for="cas_import_ad_sync_pagesize_value"><?php p($l->t('LDAP Sync Pagesize (1–1500)')); ?></label>
-                <input
-                        type="range"
-                        min="1" max="1500" step="1"
-                        id="cas_import_ad_sync_pagesize"
-                        name="cas_import_ad_sync_pagesize"
-                        value="<?php if(isset($_['cas_import_ad_sync_pagesize'])) { p($_['cas_import_ad_sync_pagesize']); } else { print_unescaped('1500'); } ?>"
-                onchange="updateRangeInput(this.value, 'cas_import_ad_sync_pagesize_value');"/>
-                <input type="number" id="cas_import_ad_sync_pagesize_value" size="4" maxlength="4" min="1" max="1500" value="<?php if(isset($_['cas_import_ad_sync_pagesize'])) { p($_['cas_import_ad_sync_pagesize']); } else { print_unescaped('1500'); } ?>">
-            </p>
-
-            <h3><?php p($l->t('CLI Attribute Mapping')); ?>:</h3>
-
-            <p><label for="cas_import_map_uid"><?php p($l->t('UID/Username')); ?></label>
-                <input
-                        id="cas_import_map_uid"
-                        name="cas_import_map_uid"
-                        value="<?php p($_['cas_import_map_uid']); ?>" placeholder="sn"/>
-            </p>
-            <p><label for="cas_import_map_displayname"><?php p($l->t('Display Name')); ?></label>
-                <input
-                        id="cas_import_map_displayname"
-                        name="cas_import_map_displayname"
-                        value="<?php p($_['cas_import_map_displayname']); ?>" placeholder="givenname"/>
-            </p>
-            <p><label for="cas_import_map_email"><?php p($l->t('Email')); ?></label>
-                <input
-                        id="cas_import_map_email"
-                        name="cas_import_map_email"
-                        value="<?php p($_['cas_import_map_email']); ?>" placeholder="email"/>
-            </p>
-
-            <p><label for="cas_import_map_groups"><?php p($l->t('Groups')); ?></label>
-                <input
-                        id="cas_import_map_groups"
-                        name="cas_import_map_groups"
-                        value="<?php p($_['cas_import_map_groups']); ?>" placeholder="memberof"/>
-            </p>
-            <p><label for="cas_import_map_groups_description"><?php p($l->t('Group Name Field')); ?></label>
-                <input
-                        id="cas_import_map_groups_description"
-                        name="cas_import_map_groups_description"
-                        value="<?php p($_['cas_import_map_groups_description']); ?>" placeholder="description"/>
-            </p>
-
-            <p><label for="cas_import_map_quota"><?php p($l->t('Quota')); ?></label>
-                <input
-                        id="cas_import_map_quota"
-                        name="cas_import_map_quota"
-                        value="<?php p($_['cas_import_map_quota']); ?>" placeholder="quota"/>
-            </p>
-            <p><label for="cas_import_map_enabled"><?php p($l->t('Enable')); ?></label>
-                <input
-                        id="cas_import_map_enabled"
-                        name="cas_import_map_enabled"
-                        value="<?php p($_['cas_import_map_enabled']); ?>" placeholder="useraccountcontrol"/>
-            </p>
-            <p><label for="cas_import_map_enabled_and_bitwise"><?php p($l->t('Calculate Enable Attribute Bitwise AND with')); ?></label>
-                <input
-                        id="cas_import_map_enabled_and_bitwise"
-                        name="cas_import_map_enabled_and_bitwise"
-                        value="<?php p($_['cas_import_map_enabled_and_bitwise']); ?>" placeholder="2"/>
-            </p>
-
-            <p>
-                <input type="checkbox" id="cas_import_merge"
-                      name="cas_import_merge" <?php print_unescaped((($_['cas_import_merge'] === 'true' || $_['cas_import_merge'] === 'on' || $_['cas_import_merge'] === '1') ? 'checked="checked"' : '')); ?>>
-                <label class='checkbox'
-                       for="cas_import_merge"><?php p($l->t('Merge Accounts')); ?></label>
-            </p>
-            <p>
-                <input type="checkbox" id="cas_import_merge_enabled"
-                      name="cas_import_merge_enabled" <?php print_unescaped((($_['cas_import_merge_enabled'] === 'true' || $_['cas_import_merge_enabled'] === 'on' || $_['cas_import_merge_enabled'] === '1') ? 'checked="checked"' : '')); ?>>
-                <label class='checkbox'
-                       for="cas_import_merge_enabled"><?php p($l->t('Prefer Enabled over Disabled Accounts on Merge')); ?></label>
-            </p>
-            <p><label for="cas_import_map_dn"><?php p($l->t('Merge Two Active Accounts by')); ?></label>
-                <input
-                        id="cas_import_map_dn"
-                        name="cas_import_map_dn"
-                        value="<?php p($_['cas_import_map_dn']); ?>" placeholder="dn"/>
-            </p>
-            <p><label for="cas_import_map_dn_filter"><?php p($l->t('Merge Two Active Accounts by: Filterstring')); ?></label>
-                <input
-                        id="cas_import_map_dn_filter"
-                        name="cas_import_map_dn_filter"
-                        value="<?php p($_['cas_import_map_dn_filter']); ?>" placeholder="cn=p"/>
-            </p>
-        </fieldset>
+        <!-- Import-CLI Not maintained -->
         <!-- phpCAS Settings -->
         <fieldset id="casSettings-7">
             <p>

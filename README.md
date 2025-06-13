@@ -72,7 +72,7 @@ The app is configured by using the administration panel. Please make sure to con
 CAS Server
 ----------
 
-**CAS Server Version**: Default is CAS version 3.0, if you have no special configuration leave it as is.
+**CAS Server Version**: Default is CAS version 2.0, if you have no special configuration leave it as is.
 
 **CAS Server Hostname**: The host name of the webserver hosting your CAS, lookup /etc/hosts or your DNS configuration or ask your IT-Department.
 

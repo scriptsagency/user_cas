@@ -23,16 +23,16 @@
 
 namespace OCA\UserCAS\Service;
 
-use OC\Authentication\Token\IToken;
 use OCA\UserCAS\Exception\PhpCas\PhpUserCasLibraryNotFoundException;
 use OCP\App\IAppManager;
 use \OCP\IConfig;
 use \OCP\IUserSession;
 use \OCP\IUserManager;
 use \OCP\IURLGenerator;
+use OCA\UserCAS\Service\EcasGrpupsParser;
 
 /**
- * Class UserService
+ * Class AppService
  *
  * @package OCA\UserCAS\Service
  *
@@ -41,986 +41,642 @@ use \OCP\IURLGenerator;
  *
  * @since 1.4.0
  */
-class AppService
-{
+class AppService {
 
-    /**
-     * @var string $appName
-     */
-    private $appName;
+  private string $appName;
+  private IConfig $config;
+  private LoggingService $loggingService;
+  private IUserManager $userManager;
+  private IUserSession $userSession;
+  private IURLGenerator $urlGenerator;
+  private IAppManager $appManager;
+  private string $casVersion;
+  private string $casHostname;
+  private int $casPort;
+  private string $casPath;
+  private string $casDebugFile;
+  private string $casCertPath;
+  private string $casPhpFile;
+  private string $casServiceUrl;
+  private bool $casDisableLogout;
+  private bool $casDisableSinglesignout;
+  private array $casHandleLogoutServers;
+  private bool $casKeepTicketIds;
+  private string $cas_ecas_accepted_strengths;
+  private string $cas_ecas_retrieve_groups;
+  private string $cas_ecas_assurance_level;
+  private bool $cas_ecas_request_full_userdetails;
+  private string $cas_ecas_internal_ip_range;
+  private bool $casInitialized;
+  private bool $ecasAttributeParserEnabled;
+  private bool $casUseProxy;
 
-    /**
-     * @var \OCP\IConfig $appConfig
-     */
-    private $config;
+  /**
+   * UserService constructor.
+   *
+   * @param $appName
+   * @param \OCP\IConfig $config
+   * @param \OCA\UserCAS\Service\LoggingService $loggingService
+   * @param \OCP\IUserManager $userManager
+   * @param \OCP\IUserSession $userSession
+   * @param \OCP\IURLGenerator $urlGenerator
+   * @param IAppManager $appManager
+   */
+  public function __construct($appName, IConfig $config, LoggingService $loggingService, IUserManager $userManager, IUserSession $userSession, IURLGenerator $urlGenerator, IAppManager $appManager) {
 
-    /**
-     * @var \OCA\UserCAS\Service\LoggingService
-     */
-    private $loggingService;
+    $this->appName = $appName;
+    $this->config = $config;
+    $this->loggingService = $loggingService;
+    $this->userManager = $userManager;
+    $this->userSession = $userSession;
+    $this->urlGenerator = $urlGenerator;
+    $this->appManager = $appManager;
+    $this->casInitialized = FALSE;
+  }
 
-    /**
-     * @var \OCP\IUserManager $userManager
-     */
-    private $userManager;
+  /**
+   * init method.
+   *
+   * @throws PhpUserCasLibraryNotFoundException
+   */
+  public function init() {
 
-    /**
-     * @var \OCP\IUserSession $userSession
-     */
-    private $userSession;
+    $serverHostName = $_SERVER['SERVER_NAME'] ?? '';
 
-    /**
-     * @var \OCP\IURLGenerator $urlGenerator
-     */
-    private $urlGenerator;
+    // Gather all app config values
+    $this->casVersion = $this->config->getAppValue($this->appName, 'cas_server_version', '3.0');
+    $this->casHostname = $this->config->getAppValue($this->appName, 'cas_server_hostname', $serverHostName);
+    $this->casPort = (int) $this->config->getAppValue($this->appName, 'cas_server_port', 443);
+    $this->casPath = $this->config->getAppValue($this->appName, 'cas_server_path', '/cas');
+    $this->casServiceUrl = $this->config->getAppValue($this->appName, 'cas_service_url', '');
+    $this->casCertPath = $this->config->getAppValue($this->appName, 'cas_cert_path', '');
 
-    /**
-     * @var IAppManager $appManager
-     */
-    private $appManager;
+    // Correctly handle cas server path for document root
+    if ($this->casPath === '/') {
+      $this->casPath = '';
+    }
 
-    /**
-     * @var string
-     */
-    private $casVersion;
+    $this->casUseProxy = (bool) $this->config->getAppValue($this->appName, 'cas_use_proxy', FALSE);
+    $this->casDisableLogout = (bool) $this->config->getAppValue($this->appName, 'cas_disable_logout', FALSE);
+    $this->casDisableSinglesignout = (bool) $this->config->getAppValue($this->appName, 'cas_disable_singlesignout', FALSE);
+    $logoutServersArray = explode(",", $this->config->getAppValue($this->appName, 'cas_handlelogout_servers', ''));
+    $this->casHandleLogoutServers = [];
+    $this->casKeepTicketIds = (bool) $this->config->getAppValue($this->appName, 'cas_keep_ticket_ids', FALSE);
 
-    /**
-     * @var string
-     */
-    private $casHostname;
+    # ECAS
+    $this->ecasAttributeParserEnabled = (bool) $this->config->getAppValue($this->appName, 'cas_ecas_attributeparserenabled', FALSE);
+    $this->cas_ecas_request_full_userdetails = (bool) $this->config->getAppValue($this->appName, 'cas_ecas_request_full_userdetails', FALSE);
+    $this->cas_ecas_accepted_strengths = $this->config->getAppValue($this->appName, 'cas_ecas_accepted_strengths');
+    $this->cas_ecas_retrieve_groups = $this->config->getAppValue($this->appName, 'cas_ecas_retrieve_groups');
+    $this->cas_ecas_assurance_level = $this->config->getAppValue($this->appName, 'cas_ecas_assurance_level');
+    $this->cas_ecas_internal_ip_range = $this->config->getAppValue($this->appName, 'cas_ecas_internal_ip_range');
 
-    /**
-     * @var int
-     */
-    private $casPort;
 
-    /**
-     * @var string
-     */
-    private $casPath;
+    foreach ($logoutServersArray as $casHandleLogoutServer) {
+      $casHandleLogoutServer = ltrim(trim($casHandleLogoutServer));
+      if (strlen($casHandleLogoutServer) > 4) {
+        $this->casHandleLogoutServers[] = $casHandleLogoutServer;
+      }
+    }
 
-    /**
-     * @var string
-     */
-    private $casDebugFile;
+    $this->casDebugFile = $this->config->getAppValue($this->appName, 'cas_debug_file', '');
+    $this->casPhpFile = $this->config->getAppValue($this->appName, 'cas_php_cas_path', '');
 
-    /**
-     * @var string
-     */
-    private $casCertPath;
+    if (is_string($this->casPhpFile) && strlen($this->casPhpFile) > 0) {
+      $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, 'Use custom phpCAS file:: ' . $this->casPhpFile);
+      if (is_file($this->casPhpFile)) {
+        require_once("$this->casPhpFile");
+      }
+      else {
+        throw new PhpUserCasLibraryNotFoundException('Your custom phpCAS library could not be loaded. The class was not found. Please disable the app with ./occ command or in Database and adjust the path to your library (or remove it to use the shipped library).', 500);
+      }
+    }
+    else {
+      if (is_file(__DIR__ . '/../../vendor/apereo/phpcas/CAS.php')) {
+        require_once(__DIR__ . '/../../vendor/apereo/phpcas/CAS.php');
+      }
+      else {
+        throw new PhpUserCasLibraryNotFoundException('phpCAS library could not be loaded. The class was not found.', 500);
+      }
+    }
 
-    /**
-     * @var string
-     */
-    private $casPhpFile;
+    if (!class_exists('\\phpCAS')) {
+      $this->loggingService->write(\OCA\UserCas\Service\LoggingService::ERROR, 'phpCAS library could not be loaded. The class was not found.');
+      throw new PhpUserCasLibraryNotFoundException('phpCAS library could not be loaded. The class was not found.', 500);
+    }
 
-    /**
-     * @var string
-     */
-    private $casServiceUrl;
+    if (!\phpCAS::isInitialized()) {
+      try {
+        \phpCAS::setVerbose(FALSE);
+        if (!empty($this->casDebugFile)) {
+          \phpCAS::setDebug($this->casDebugFile);
+          \phpCAS::setVerbose(TRUE);
+        }
 
-    /**
-     * @var boolean
-     */
-    private $casDisableLogout;
+        $serviceBasedUrl = $this->getServiceBasedUrl();
 
-    /**
-     * @var boolean
-     */
-    private $casDisableSinglesignout;
+        # Initialize client
+        if ($this->casUseProxy) {
+          \phpCAS::proxy($this->casVersion, $this->casHostname, (int) ($this->casPort), $this->casPath, $serviceBasedUrl);
+        }
+        else {
+          \phpCAS::client($this->casVersion, $this->casHostname, (int) ($this->casPort), $this->casPath, $serviceBasedUrl);
+        }
 
-    /**
-     * @var array
-     */
-    private $casHandleLogoutServers;
+        # Handle SingleSignout requests
+        if (!$this->casDisableSinglesignout) {
+          \phpCAS::setSingleSignoutCallback([$this, 'casSingleSignOut']);
+          \phpCAS::handleLogoutRequests(TRUE, $this->casHandleLogoutServers);
+        }
 
-    /**
-     * @var boolean
-     */
-    private $casKeepTicketIds;
+        # Handle fixed service URL
+        if (!empty($this->casServiceUrl)) {
+          \phpCAS::setFixedServiceURL($this->casServiceUrl);
+        }
 
-    /**
-     * @var string
-     */
-    private $cas_ecas_accepted_strengths;
+        # Handle certificate
+        if (!empty($this->casCertPath)) {
+          \phpCAS::setCasServerCACert($this->casCertPath);
+        }
+        else {
+          \phpCAS::setNoCasServerValidation();
+        }
 
-    /**
-     * @var string
-     */
-    private $cas_ecas_retrieve_groups;
+        # Handle keeping of cas-ticket-ids
+        if ($this->casKeepTicketIds) {
+          \phpCAS::setNoClearTicketsFromUrl();
+        }
 
-    /**
-     * @var string
-     */
-    private $cas_ecas_assurance_level;
+        # Handle ECAS Attributes if enabled
+        if ($this->ecasAttributeParserEnabled) {
 
-    /**
-     * @var boolean
-     */
-    private $cas_ecas_request_full_userdetails;
+          # Register the parser
+          \phpCAS::setCasAttributeParserCallback([
+            new EcasGrpupsParser(),
+            'parse',
+          ]);
+          $this->loggingService->write(\OCA\UserCas\Service\LoggingService::ERROR, "phpCAS EcasGrpupsParser has been successfully set.");
+        }
 
-    /**
-     * @var string
-     */
-    private $cas_ecas_internal_ip_range;
+        #### Register the new ticket validation url
+        if (($this->cas_ecas_retrieve_groups !== '')
+          || ($this->cas_ecas_request_full_userdetails)
+          || ($this->cas_ecas_assurance_level !== '')
+          || ($this->cas_ecas_accepted_strengths !== '')) {
 
-    /**
-     * @var boolean
-     */
-    private $casInitialized;
+          ## Check for external IP Ranges to en-/disable the Two-Factor-Authentication (AcceptedStrength at least MEDIUM)
+          if ($this->isIpInLocalRange($this->cas_ecas_internal_ip_range) && $this->cas_ecas_accepted_strengths !== '') {
+            $this->cas_ecas_accepted_strengths = 'BASIC';
+            $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS ECAS AcceptedStrength Level is forced to BASIC, because the user is in the internal network.");
+          }
 
-    /**
-     * @var boolean
-     */
-    private $ecasAttributeParserEnabled;
+          # Add acceptedStrength Querystring Parameters
+          if ($this->cas_ecas_accepted_strengths !== '') {
+            # Register the new login url
+            $serverLoginUrl = \phpCAS::getServerLoginURL();
+            $serverLoginUrl = $this->buildQueryUrl($serverLoginUrl, 'acceptStrengths=' . urlencode($this->cas_ecas_accepted_strengths));
+            \phpCAS::setServerLoginURL($serverLoginUrl);
+            $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS ECAS strength attribute has been successfully set. New service login URL: " . $serverLoginUrl);
+          }
 
-    /**
-     * @var boolean
-     */
-    private $casUseProxy;
+          ## Change validation URL based on ECAS assuranceLevel
+          $newProtocol = 'http://';
+          $newUrl = '';
+          $newSamlUrl = '';
 
-    /**
-     * UserService constructor.
-     * @param $appName
-     * @param \OCP\IConfig $config
-     * @param \OCA\UserCAS\Service\LoggingService $loggingService
-     * @param \OCP\IUserManager $userManager
-     * @param \OCP\IUserSession $userSession
-     * @param \OCP\IURLGenerator $urlGenerator
-     * @param IAppManager $appManager
-     */
-    public function __construct($appName, IConfig $config, LoggingService $loggingService, IUserManager $userManager, IUserSession $userSession, IURLGenerator $urlGenerator, IAppManager $appManager)
-    {
+          if ($this->getCasPort() === 443) {
+            $newProtocol = 'https://';
+          }
 
-        $this->appName = $appName;
-        $this->config = $config;
-        $this->loggingService = $loggingService;
-        $this->userManager = $userManager;
-        $this->userSession = $userSession;
-        $this->urlGenerator = $urlGenerator;
-        $this->appManager = $appManager;
+          if ($this->getCasVersion() === "1.0") {
+            $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/validate';
+          }
+          else {
+            if ($this->getCasVersion() === "2.0") {
+              $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/serviceValidate';
+            }
+            else {
+              if ($this->getCasVersion() === "3.0") {
+                $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/p3/serviceValidate';
+              }
+              else {
+                if ($this->getCasVersion() === "S1") {
+                  $newSamlUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/samlValidate';
+                }
+              }
+            }
+          }
+
+          if (is_string($this->cas_ecas_assurance_level) && $this->cas_ecas_assurance_level === 'LOW') {
+            $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/laxValidate';
+          }
+          else {
+            if (is_string($this->cas_ecas_assurance_level) && $this->cas_ecas_assurance_level === 'MEDIUM') {
+              $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/sponsorValidate';
+            }
+            else {
+              if (is_string($this->cas_ecas_assurance_level) && $this->cas_ecas_assurance_level === 'HIGH') {
+                $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/interinstitutionalValidate';
+              }
+              else {
+                if (is_string($this->cas_ecas_assurance_level) && $this->cas_ecas_assurance_level === 'TOP') {
+                  $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/strictValidate';
+                }
+              }
+            }
+          }
+
+          if (!empty($this->casServiceUrl)) {
+            $newUrl = $this->buildQueryUrl($newUrl, 'service=' . urlencode($this->casServiceUrl));
+            $newSamlUrl = $this->buildQueryUrl($newSamlUrl, 'TARGET=' . urlencode($this->casServiceUrl));
+          }
+          else {
+            $newUrl = $this->buildQueryUrl($newUrl, 'service=' . urlencode(\phpCAS::getServiceURL()));
+            $newSamlUrl = $this->buildQueryUrl($newSamlUrl, 'TARGET=' . urlencode(\phpCAS::getServiceURL()));
+          }
+
+          # Add the groups to retrieve
+          if (is_string($this->cas_ecas_retrieve_groups) && strlen($this->cas_ecas_retrieve_groups) > 0) {
+            $newUrl = $this->buildQueryUrl($newUrl, 'groups=' . urlencode($this->cas_ecas_retrieve_groups));
+            $newSamlUrl = $this->buildQueryUrl($newSamlUrl, 'groups=' . urlencode($this->cas_ecas_retrieve_groups));
+          }
+
+          # Add the requestFullUserDetails flag
+          if ($this->cas_ecas_request_full_userdetails) {
+            $newUrl = $this->buildQueryUrl($newUrl, 'userDetails=' . urlencode('true'));
+            $newSamlUrl = $this->buildQueryUrl($newSamlUrl, 'userDetails=' . urlencode('true'));
+          }
+
+          # Set the user agent to mimic an ecas client
+          $userAgent = sprintf("ECAS PHP Client (%s, %s)",
+            '2.1.3',
+            $_SERVER['SERVER_SOFTWARE']);
+          \phpCAS::setExtraCurlOption(CURLOPT_USERAGENT, $userAgent);
+
+          # Set the new URLs
+          if ($this->getCasVersion() !== "S1" && !empty($newUrl)) {
+            \phpCAS::setServerServiceValidateURL($newUrl);
+            $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS ECAS additional attributes have been successfully set. New CAS " . $this->getCasVersion() . " service validate URL: " . $newUrl);
+          }
+          elseif ($this->getCasVersion() === "S1" && !empty($newSamlUrl)) {
+            \phpCAS::setServerSamlValidateURL($newSamlUrl);
+            $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS ECAS additional attributes have been successfully set. New SAML 1.0 service validate URL: " . $newSamlUrl);
+          }
+        }
+
+        $this->casInitialized = TRUE;
+        $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS has been successfully initialized.");
+      } catch (\CAS_Exception $e) {
+        \phpCAS::setVerbose(TRUE);
         $this->casInitialized = FALSE;
+        $this->loggingService->write(\OCA\UserCas\Service\LoggingService::ERROR, "phpCAS has thrown an exception with code: " . $e->getCode() . " and message: " . $e->getMessage() . ".");
+      }
     }
+    else {
+      $this->casInitialized = TRUE;
+      $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS has already been initialized.");
+    }
+  }
 
+  /**
+   * Check if login should be enforced using user_cas.
+   *
+   * @param $remoteAddress
+   * @param string $requestUri
+   *
+   * @return bool
+   */
+  public function isEnforceAuthentication($remoteAddress, string $requestUri): bool {
 
-    /**
-     * init method.
-     * @throws PhpUserCasLibraryNotFoundException
-     */
-    public function init()
-    {
+    $isEnforced = true;
 
-        $serverHostName = (isset($_SERVER['SERVER_NAME'])) ? $_SERVER['SERVER_NAME'] : '';
+    $forceLoginExceptions = $this->config->getAppValue($this->appName, 'cas_force_login_exceptions', '');
+    $forceLoginExceptionsArray = explode(',', $forceLoginExceptions);
 
-        // Gather all app config values
-        $this->casVersion = $this->config->getAppValue($this->appName, 'cas_server_version', '3.0');
-        $this->casHostname = $this->config->getAppValue($this->appName, 'cas_server_hostname', $serverHostName);
-        $this->casPort = intval($this->config->getAppValue($this->appName, 'cas_server_port', 443));
-        $this->casPath = $this->config->getAppValue($this->appName, 'cas_server_path', '/cas');
-        $this->casServiceUrl = $this->config->getAppValue($this->appName, 'cas_service_url', '');
-        $this->casCertPath = $this->config->getAppValue($this->appName, 'cas_cert_path', '');
+    # Enforce off
+    if ($this->config->getAppValue($this->appName, 'cas_force_login') !== '1') {
+      $isEnforced = false;
+    }
+    else {
+      # Check enforce IP ranges
+      foreach ($forceLoginExceptionsArray as $forceLoginException) {
+        $forceLoginExceptionRanges = explode('-', $forceLoginException);
+        if (isset($forceLoginExceptionRanges[0])) {
+          if (isset($forceLoginExceptionRanges[1])) {
+            $baseIpComponents = explode('.', $forceLoginExceptionRanges[0]);
+            $baseIp = $baseIpComponents[0] . '.' . $baseIpComponents[1] . '.';
+            $additionalIpComponents = explode('.', $forceLoginExceptionRanges[1]);
+            if (isset($additionalIpComponents[1]) && $additionalIpComponents[0]) {
+              # We have a two-part range here (e.g., 127.0.0.1-1.19) which means, we have to cover 127.0.0.1-127.0.0.254 and 127.0.1.1-127.0.1.19
+              for ($ipThirdPart = (int) $baseIpComponents[2]; $ipThirdPart <= (int) $additionalIpComponents[0]; $ipThirdPart++) {
+                if ($ipThirdPart !== (int) $additionalIpComponents[0]) {
+                  $ipFourthPartMax = 254;
+                }
+                else {
+                  $ipFourthPartMax = (int) $additionalIpComponents[1];
+                }
 
-
-        // Correctly handle cas server path for document root
-        if ($this->casPath === '/') {
-            $this->casPath = '';
-        }
-
-        $this->casUseProxy = boolval($this->config->getAppValue($this->appName, 'cas_use_proxy', false));
-        $this->casDisableLogout = boolval($this->config->getAppValue($this->appName, 'cas_disable_logout', false));
-        $this->casDisableSinglesignout = boolval($this->config->getAppValue($this->appName, 'cas_disable_singlesignout', false));
-        $logoutServersArray = explode(",", $this->config->getAppValue($this->appName, 'cas_handlelogout_servers', ''));
-        $this->casHandleLogoutServers = array();
-        $this->casKeepTicketIds = boolval($this->config->getAppValue($this->appName, 'cas_keep_ticket_ids', false));
-
-        # ECAS
-        $this->ecasAttributeParserEnabled = boolval($this->config->getAppValue($this->appName, 'cas_ecas_attributeparserenabled', false));
-        $this->cas_ecas_request_full_userdetails = boolval($this->config->getAppValue($this->appName, 'cas_ecas_request_full_userdetails', false));
-        $this->cas_ecas_accepted_strengths = $this->config->getAppValue($this->appName, 'cas_ecas_accepted_strengths');
-        $this->cas_ecas_retrieve_groups = $this->config->getAppValue($this->appName, 'cas_ecas_retrieve_groups');
-        $this->cas_ecas_assurance_level = $this->config->getAppValue($this->appName, 'cas_ecas_assurance_level');
-        $this->cas_ecas_internal_ip_range = $this->config->getAppValue($this->appName, 'cas_ecas_internal_ip_range');
-
-
-        foreach ($logoutServersArray as $casHandleLogoutServer) {
-
-            $casHandleLogoutServer = ltrim(trim($casHandleLogoutServer));
-
-            if (strlen($casHandleLogoutServer) > 4) {
-
-                $this->casHandleLogoutServers[] = $casHandleLogoutServer;
+                for ($ipFourthPart = (int) $baseIpComponents[3]; $ipFourthPart <= $ipFourthPartMax; $ipFourthPart++) {
+                  $endIp = $baseIp . $ipThirdPart . '.' . $ipFourthPart;
+                  if ($remoteAddress === $endIp) {
+                    $isEnforced = false;
+                    $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS Enforce Login NOT triggered. Test Address: " . $endIp . " | Users Remote Address: " . $remoteAddress);
+                  }
+                }
+              }
             }
-        }
-
-        $this->casDebugFile = $this->config->getAppValue($this->appName, 'cas_debug_file', '');
-        $this->casPhpFile = $this->config->getAppValue($this->appName, 'cas_php_cas_path', '');
-
-        if (is_string($this->casPhpFile) && strlen($this->casPhpFile) > 0) {
-
-            $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, 'Use custom phpCAS file:: ' . $this->casPhpFile);
-            #\OCP\Util::writeLog('cas', 'Use custom phpCAS file:: ' . $this->casPhpFile, \OCA\UserCas\Service\LoggingService::DEBUG);
-
-            if (is_file($this->casPhpFile)) {
-
-                require_once("$this->casPhpFile");
-            } else {
-
-                throw new PhpUserCasLibraryNotFoundException('Your custom phpCAS library could not be loaded. The class was not found. Please disable the app with ./occ command or in Database and adjust the path to your library (or remove it to use the shipped library).', 500);
+            elseif ($additionalIpComponents[0]) {
+              # We have a one part range here (eg. 127.0.0.1-19)
+              $newIp = $baseIp . $baseIpComponents[2] . '.';
+              for ($ipFourthPart = (int) $baseIpComponents[3]; $ipFourthPart <= (int) $additionalIpComponents[0]; $ipFourthPart++) {
+                $endIp = $newIp . $ipFourthPart;
+                if ($remoteAddress === $endIp) {
+                  $isEnforced = false;
+                  $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS Enforce Login NOT triggered. Test Address: " . $endIp . " | Users Remote Address: " . $remoteAddress);
+                }
+              }
             }
-
-        } else {
-
-            if (is_file(__DIR__ . '/../../vendor/jasig/phpcas/CAS.php')) {
-
-                require_once(__DIR__ . '/../../vendor/jasig/phpcas/CAS.php');
-            } else {
-
-                throw new PhpUserCasLibraryNotFoundException('phpCAS library could not be loaded. The class was not found.', 500);
+          }
+          else {
+            # Single IP-Adress given
+            if ($remoteAddress === $forceLoginExceptionRanges[0]) {
+              $isEnforced = false;
+              $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS Enforce Login NOT triggered. Test Address: " . $forceLoginExceptionRanges[0] . " | Users Remote Address: " . $remoteAddress);
             }
+          }
         }
+      }
+    }
 
-        if (!class_exists('\\phpCAS')) {
+    # User already logged in
+    if ($this->userSession->isLoggedIn()) {
+      $isEnforced = false;
+    }
 
-            $this->loggingService->write(\OCA\UserCas\Service\LoggingService::ERROR, 'phpCAS library could not be loaded. The class was not found.');
+    # Disable on Nextcloud login-flow use
+    if (str_contains($requestUri, "/login/flow")) {
+      $isEnforced = false;
+    }
 
-            throw new PhpUserCasLibraryNotFoundException('phpCAS library could not be loaded. The class was not found.', 500);
-        }
+    return $isEnforced;
+  }
 
-        if (!\phpCAS::isInitialized()) {
+  /**
+   * Check if public shares should be protected
+   *
+   * @return bool
+   */
+  public function arePublicSharesProtected(): bool {
+    $protected = (bool) $this->config->getAppValue($this->appName, 'cas_shares_protected', true);
+    $loggedIn = $this->userSession->isLoggedIn();
 
-            try {
+    if ($loggedIn && $protected) {
+      $protected = false;
+    }
 
-                \phpCAS::setVerbose(FALSE);
+    return $protected;
+  }
 
-                if (!empty($this->casDebugFile)) {
+  /**
+   * @return bool
+   */
+  public function isSetupValid(): bool {
+    $casHostname = $this->config->getAppValue($this->appName, 'cas_server_hostname');
+    $casPort = (int) $this->config->getAppValue($this->appName, 'cas_server_port');
+    $casPath = $this->config->getAppValue($this->appName, 'cas_server_path');
 
-                    \phpCAS::setDebug($this->casDebugFile);
-                    \phpCAS::setVerbose(TRUE);
+    if (is_string($casHostname) && strlen($casHostname) > 1 && is_int($casPort) && $casPort > 1 && is_string($casPath) && strpos($casPath, "/") === 0) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Create a link to $route with URLGenerator.
+   *
+   * @param string $route
+   * @param array $arguments
+   *
+   * @return string
+   */
+  public function linkToRoute(string $route, array $arguments = []): string {
+    return $this->urlGenerator->linkToRoute($route, $arguments);
+  }
+
+  /**
+   * Create an absolute link to $route with URLGenerator.
+   *
+   * @param string $route
+   * @param array $arguments
+   *
+   * @return string
+   */
+  public function linkToRouteAbsolute(string $route, array $arguments = []): string {
+    return $this->urlGenerator->linkToRouteAbsolute($route, $arguments);
+  }
+
+  /**
+   * Create an url relative to owncloud host
+   *
+   * @param string $url
+   *
+   * @return mixed
+   */
+  public function getAbsoluteURL(string $url): mixed {
+    return $this->urlGenerator->getAbsoluteURL($url);
+  }
+
+  /**
+   * @return bool
+   */
+  public function isCasInitialized(): bool {
+    return $this->casInitialized;
+  }
+
+  /**
+   * This method is used to append query parameters to a url. Since the url
+   * might already contain parameter, it has to be detected and to build a proper
+   * URL
+   *
+   * @param string $url base url to add the query params to
+   * @param string $query params in query form with & separated
+   *
+   * @return string url with query params
+   */
+  private function buildQueryUrl(string $url, string $query): string {
+    $url .= (strstr($url, '?') === false) ? '?' : '&';
+    $url .= $query;
+    return $url;
+  }
+
+
+  /**
+   * Test if the client's IP adress is in our local range
+   *
+   * @param string|array $internalIps
+   *
+   * @return bool
+   */
+  private function isIpInLocalRange(string|array $internalIps): bool {
+    if (is_string($internalIps)) {
+      $internalIps = explode(',', $internalIps);
+    }
+
+    $remoteAddress = $_SERVER['REMOTE_ADDR'];
+    $proxyHeader = "HTTP_X_FORWARDED_FOR";
+
+    # Header can contain multiple IP-s of proxies that are passed through.
+    # Only the IP added by the last proxy (last IP in the list) can be trusted.
+    if (array_key_exists($proxyHeader, $_SERVER)) {
+      $explodedProxyHeader = explode(",", $_SERVER[$proxyHeader]);
+      $proxyIp = trim(end($explodedProxyHeader));
+      if (filter_var($proxyIp, FILTER_VALIDATE_IP)) {
+        $remoteAddress = $proxyIp;
+      }
+    }
+
+    # Check enforce IP ranges for acceptedStrength attribute
+    foreach ($internalIps as $internalIp) {
+      $internalIpRanges = explode('-', $internalIp);
+      if (isset($internalIpRanges[0])) {
+        if (isset($internalIpRanges[1])) {
+          $baseIpComponents = explode('.', $internalIpRanges[0]);
+          $baseIp = $baseIpComponents[0] . '.' . $baseIpComponents[1] . '.';
+          $additionalIpComponents = explode('.', $internalIpRanges[1]);
+          if (isset($additionalIpComponents[1]) && $additionalIpComponents[0]) {
+            # We have a two-part range here (e.g., 127.0.0.1-1.19) which means, we have to cover 127.0.0.1-127.0.0.254 and 127.0.1.1-127.0.1.19
+            for ($ipThirdPart = (int) $baseIpComponents[2]; $ipThirdPart <= (int) $additionalIpComponents[0]; $ipThirdPart++) {
+              if ($ipThirdPart !== (int) $additionalIpComponents[0]) {
+                $ipFourthPartMax = 254;
+              }
+              else {
+                $ipFourthPartMax = (int) $additionalIpComponents[1];
+              }
+
+              for ($ipFourthPart = (int) $baseIpComponents[3]; $ipFourthPart <= $ipFourthPartMax; $ipFourthPart++) {
+                $endIp = $baseIp . $ipThirdPart . '.' . $ipFourthPart;
+                if ($remoteAddress === $endIp) {
+                  return true;
                 }
-
-				$serviceBasedUrl = $this->getServiceBasedUrl();
-
-                # Initialize client
-                if ($this->casUseProxy) {
-
-                    \phpCAS::proxy($this->casVersion, $this->casHostname, (int)($this->casPort), $this->casPath, $serviceBasedUrl);
-                } else {
-
-                    \phpCAS::client($this->casVersion, $this->casHostname, (int)($this->casPort), $this->casPath, $serviceBasedUrl);
-                }
-
-                # Handle SingleSignout requests
-                if (!$this->casDisableSinglesignout) {
-
-                    \phpCAS::setSingleSignoutCallback([$this, 'casSingleSignOut']);
-                    \phpCAS::handleLogoutRequests(true, $this->casHandleLogoutServers);
-                }
-
-                # Handle fixed service URL
-                if (!empty($this->casServiceUrl)) {
-
-                    \phpCAS::setFixedServiceURL($this->casServiceUrl);
-                }
-
-                # Handle certificate
-                if (!empty($this->casCertPath)) {
-
-                    \phpCAS::setCasServerCACert($this->casCertPath);
-                } else {
-
-                    \phpCAS::setNoCasServerValidation();
-                }
-
-                # Handle keeping of cas-ticket-ids
-                if ($this->casKeepTicketIds) {
-
-                    \phpCAS::setNoClearTicketsFromUrl();
-                }
-
-                # Handle ECAS Attributes if enabled
-                if ($this->ecasAttributeParserEnabled) {
-
-                    if (is_file(__DIR__ . '/../../vendor/ec-europa/ecas-phpcas-parser/src/EcasPhpCASParser.php')) {
-
-                        require_once(__DIR__ . '/../../vendor/ec-europa/ecas-phpcas-parser/src/EcasPhpCASParser.php');
-                    } else {
-
-                        $this->loggingService->write(\OCA\UserCas\Service\LoggingService::ERROR, 'phpCAS EcasPhpCASParser library could not be loaded. The class was not found.');
-
-                        throw new PhpUserCasLibraryNotFoundException('phpCAS EcasPhpCASParser could not be loaded. The class was not found.', 500);
-                    }
-
-                    # Register the parser
-                    \phpCAS::setCasAttributeParserCallback(array(new \EcasPhpCASParser\EcasPhpCASParser(), 'parse'));
-                    $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS EcasPhpCASParser has been successfully set.");
-                }
-
-                #### Register the new ticket validation url
-                if ((is_string($this->cas_ecas_retrieve_groups) && strlen($this->cas_ecas_retrieve_groups) > 0)
-                    || ($this->cas_ecas_request_full_userdetails)
-                    || (is_string($this->cas_ecas_assurance_level) && strlen($this->cas_ecas_assurance_level) > 0)
-                    || (is_string($this->cas_ecas_accepted_strengths) && strlen($this->cas_ecas_accepted_strengths) > 0)) {
-
-
-                    ## Check for external IP Ranges to en-/disable the Two-Factor-Authentication (AcceptedStrength at least MEDIUM)
-                    if ($this->isIpInLocalRange($this->cas_ecas_internal_ip_range) && $this->cas_ecas_accepted_strengths !== '') {
-
-                        $this->cas_ecas_accepted_strengths = 'BASIC';
-                        $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS ECAS AcceptedStrength Level is forced to BASIC, because the user is in the internal network. Test Address: " . $endIp . " | Users Remote Address: " . $remoteAddress);
-                    }
-
-                    # Add acceptedStrength Querystring Parameters
-                    if (is_string($this->cas_ecas_accepted_strengths) && strlen($this->cas_ecas_accepted_strengths) > 0) {
-
-                        # Register the new login url
-                        $serverLoginUrl = \phpCAS::getServerLoginURL();
-
-                        $serverLoginUrl = $this->buildQueryUrl($serverLoginUrl, 'acceptStrengths=' . urlencode($this->cas_ecas_accepted_strengths));
-
-                        \phpCAS::setServerLoginURL($serverLoginUrl);
-
-                        $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS ECAS strength attribute has been successfully set. New service login URL: " . $serverLoginUrl);
-                    }
-
-                    ## Change validation URL based on ECAS assuranceLevel
-                    $newProtocol = 'http://';
-                    $newUrl = '';
-                    $newSamlUrl = '';
-
-                    if ($this->getCasPort() === 443) {
-
-                        $newProtocol = 'https://';
-                    }
-
-                    if ($this->getCasVersion() === "1.0") {
-
-                        $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/validate';
-                    } else if ($this->getCasVersion() === "2.0") {
-
-                        $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/serviceValidate';
-                    } else if ($this->getCasVersion() === "3.0") {
-
-                        $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/p3/serviceValidate';
-                    } else if ($this->getCasVersion() === "S1") {
-
-                        $newSamlUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/samlValidate';
-                    }
-
-                    if (is_string($this->cas_ecas_assurance_level) && $this->cas_ecas_assurance_level === 'LOW') {
-
-                        $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/laxValidate';
-                    } else if (is_string($this->cas_ecas_assurance_level) && $this->cas_ecas_assurance_level === 'MEDIUM') {
-
-                        $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/sponsorValidate';
-                    } else if (is_string($this->cas_ecas_assurance_level) && $this->cas_ecas_assurance_level === 'HIGH') {
-
-                        $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/interinstitutionalValidate';
-                    } else if (is_string($this->cas_ecas_assurance_level) && $this->cas_ecas_assurance_level === 'TOP') {
-
-                        $newUrl = $newProtocol . $this->getCasHostname() . $this->getCasPath() . '/strictValidate';
-                    }
-
-                    if (!empty($this->casServiceUrl)) {
-
-                        $newUrl = $this->buildQueryUrl($newUrl, 'service=' . urlencode($this->casServiceUrl));
-                        $newSamlUrl = $this->buildQueryUrl($newSamlUrl, 'TARGET=' . urlencode($this->casServiceUrl));
-                    } else {
-
-                        $newUrl = $this->buildQueryUrl($newUrl, 'service=' . urlencode(\phpCAS::getServiceURL()));
-                        $newSamlUrl = $this->buildQueryUrl($newSamlUrl, 'TARGET=' . urlencode(\phpCAS::getServiceURL()));
-                    }
-
-                    # Add the groups to retrieve
-                    if (is_string($this->cas_ecas_retrieve_groups) && strlen($this->cas_ecas_retrieve_groups) > 0) {
-
-                        $newUrl = $this->buildQueryUrl($newUrl, 'groups=' . urlencode($this->cas_ecas_retrieve_groups));
-                        $newSamlUrl = $this->buildQueryUrl($newSamlUrl, 'groups=' . urlencode($this->cas_ecas_retrieve_groups));
-                    }
-
-                    # Add the requestFullUserDetails flag
-                    if ($this->cas_ecas_request_full_userdetails) {
-
-                        $newUrl = $this->buildQueryUrl($newUrl, 'userDetails=' . urlencode('true'));
-                        $newSamlUrl = $this->buildQueryUrl($newSamlUrl, 'userDetails=' . urlencode('true'));
-                    }
-
-                    # Set the user agent to mimic an ecas client
-                    $userAgent = sprintf("ECAS PHP Client (%s, %s)",
-                        '2.1.3',
-                        $_SERVER['SERVER_SOFTWARE']);
-                    \phpCAS::setExtraCurlOption(CURLOPT_USERAGENT, $userAgent);
-
-                    # Set the new URLs
-                    if ($this->getCasVersion() !== "S1" && !empty($newUrl)) {
-
-                        \phpCAS::setServerServiceValidateURL($newUrl);
-                        $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS ECAS additional attributes have been successfully set. New CAS " . $this->getCasVersion() . " service validate URL: " . $newUrl);
-
-                    } elseif ($this->getCasVersion() === "S1" && !empty($newSamlUrl)) {
-
-                        \phpCAS::setServerSamlValidateURL($newSamlUrl);
-                        $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS ECAS additional attributes have been successfully set. New SAML 1.0 service validate URL: " . $newSamlUrl);
-                    }
-                }
-
-
-                $this->casInitialized = TRUE;
-
-                $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS has been successfully initialized.");
-
-            } catch (\CAS_Exception $e) {
-
-                \phpCAS::setVerbose(TRUE);
-
-                $this->casInitialized = FALSE;
-
-                $this->loggingService->write(\OCA\UserCas\Service\LoggingService::ERROR, "phpCAS has thrown an exception with code: " . $e->getCode() . " and message: " . $e->getMessage() . ".");
+              }
             }
-        } else {
-
-            $this->casInitialized = TRUE;
-
-            $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS has already been initialized.");
-        }
-    }
-
-    /**
-     * Test if the instance is not a Nextcloud instance
-     *
-     * @return bool
-     */
-    public function isNotNextcloud()
-    {
-
-        require __DIR__ . '/../../../../version.php';
-
-        /**
-         * @var string $vendor The vendor of this instance
-         */
-
-        #$this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS vendor: ".$vendor);
-
-        if (strpos(strtolower($vendor), 'next') === FALSE) {
-
-            return TRUE;
-        }
-
-        return FALSE;
-    }
-
-    /**
-     * Check if login should be enforced using user_cas.
-     *
-     * @param $remoteAddress
-     * @param string $requestUri
-     * @return bool TRUE|FALSE
-     */
-    public function isEnforceAuthentication($remoteAddress, $requestUri)
-    {
-
-        $isEnforced = TRUE;
-
-        $forceLoginExceptions = $this->config->getAppValue($this->appName, 'cas_force_login_exceptions', '');
-        $forceLoginExceptionsArray = explode(',', $forceLoginExceptions);
-
-        # Enforce off
-        if ($this->config->getAppValue($this->appName, 'cas_force_login') !== '1') {
-
-            $isEnforced = FALSE;
-        } else {
-
-            # Check enforce IP ranges
-            foreach ($forceLoginExceptionsArray as $forceLoginException) {
-
-                $forceLoginExceptionRanges = explode('-', $forceLoginException);
-
-                if (isset($forceLoginExceptionRanges[0])) {
-
-                    if (isset($forceLoginExceptionRanges[1])) {
-
-                        $baseIpComponents = explode('.', $forceLoginExceptionRanges[0]);
-
-                        $baseIp = $baseIpComponents[0] . '.' . $baseIpComponents[1] . '.';
-
-                        $additionalIpComponents = explode('.', $forceLoginExceptionRanges[1]);
-
-                        if (isset($additionalIpComponents[1]) && $additionalIpComponents[0]) {
-
-                            # We have a two part range here (eg. 127.0.0.1-1.19) which means, we have to cover 127.0.0.1-127.0.0.254 and 127.0.1.1-127.0.1.19
-
-                            for ($ipThirdPart = intval($baseIpComponents[2]); $ipThirdPart <= intval($additionalIpComponents[0]); $ipThirdPart++) {
-
-                                if ($ipThirdPart !== intval($additionalIpComponents[0])) {
-
-                                    $ipFourthPartMax = 254;
-                                } else {
-
-                                    $ipFourthPartMax = intval($additionalIpComponents[1]);
-                                }
-
-                                for ($ipFourthPart = intval($baseIpComponents[3]); $ipFourthPart <= $ipFourthPartMax; $ipFourthPart++) {
-
-                                    $endIp = $baseIp . $ipThirdPart . '.' . $ipFourthPart;
-
-                                    #$this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS Enforce Login IP checked: " . $endIp);
-
-                                    if ($remoteAddress === $endIp) {
-
-                                        $isEnforced = FALSE;
-
-                                        $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS Enforce Login NOT triggered. Test Address: " . $endIp . " | Users Remote Address: " . $remoteAddress);
-                                    }
-                                }
-                            }
-
-                        } elseif ($additionalIpComponents[0]) {
-
-                            # We have a one part range here (eg. 127.0.0.1-19)
-
-                            $newIp = $baseIp . $baseIpComponents[2] . '.';
-
-                            for ($ipFourthPart = intval($baseIpComponents[3]); $ipFourthPart <= intval($additionalIpComponents[0]); $ipFourthPart++) {
-
-                                $endIp = $newIp . $ipFourthPart;
-
-                                if ($remoteAddress === $endIp) {
-
-                                    $isEnforced = FALSE;
-
-                                    $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS Enforce Login NOT triggered. Test Address: " . $endIp . " | Users Remote Address: " . $remoteAddress);
-                                }
-                            }
-                        }
-                    } else {
-
-                        # Single IP-Adress given
-                        if ($remoteAddress === $forceLoginExceptionRanges[0]) {
-
-                            $isEnforced = FALSE;
-
-                            $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS Enforce Login NOT triggered. Test Address: " . $forceLoginExceptionRanges[0] . " | Users Remote Address: " . $remoteAddress);
-                        }
-                    }
-                }
+          }
+          elseif ($additionalIpComponents[0]) {
+            # We have a one part range here (e.g., 127.0.0.1-19)
+            $newIp = $baseIp . $baseIpComponents[2] . '.';
+            for ($ipFourthPart = (int) $baseIpComponents[3]; $ipFourthPart <= (int) $additionalIpComponents[0]; $ipFourthPart++) {
+              $endIp = $newIp . $ipFourthPart;
+              if ($remoteAddress === $endIp) {
+                return true;
+              }
             }
+          }
         }
-
-        # User already logged in
-        if ($this->userSession->isLoggedIn()) {
-
-            $isEnforced = FALSE;
+        else if ($remoteAddress === $internalIpRanges[0]) {
+          return true;
         }
-
-        # Disable on Nextcloud login-flow use
-        if (!$this->isNotNextcloud() && strpos($requestUri, "/login/flow") !== FALSE) {
-
-            $isEnforced = FALSE;
-        }
-
-        return $isEnforced;
+      }
     }
 
-    /**
-     * Check if public shares should be protected
-     *
-     * @return bool TRUE|FALSE
-     */
-    public function arePublicSharesProtected()
-    {
-        $protected = (bool)$this->config->getAppValue($this->appName, 'cas_shares_protected', FALSE);
-        $loggedIn = $this->userSession->isLoggedIn();
+    return false;
+  }
 
-        if($loggedIn && $protected) {
-            $protected = FALSE;
-        }
+  /**
+   * Callback function for CAS singleSignOut call
+   *
+   * @author Vincent <https://github.com/pingou2712>
+   *
+   */
+  public function casSingleSignOut(): void {
+    // Extract the userID from the SAML Request
+    $decodedLogoutRequest = urldecode($_POST['logoutRequest']);
+    preg_match(
+      "|<saml:NameID[^>]*>(.*)</saml:NameID>|",
+      $decodedLogoutRequest, $tick, PREG_OFFSET_CAPTURE, 3
+    );
+    $wrappedSamlNameId = preg_replace(
+      '|<saml:NameID[^>]*>|', '', $tick[0][0]
+    );
+    $nameId = preg_replace(
+      '|</saml:NameID>|', '', $wrappedSamlNameId
+    );
 
-        return $protected;
+    //Kill Session Of UserID:
+    $this->killSessionUserName($nameId);
+  }
+
+  /**
+   * Kill the username's session.
+   *
+   * @author Vincent <https://github.com/pingou2712>
+   * @author Felix Rupp <kontakt@felixrupp.com>
+   *
+   * @param string $username
+   * @return void
+   *
+   * @throws \Doctrine\DBAL\Exception
+   * @throws \OCP\DB\Exception
+   */
+  private function killSessionUserName(string $username): void {
+    if ($this->userManager->userExists($username)) {
+      $tokenType = \OCP\Authentication\Token\IToken::TEMPORARY_TOKEN;
+
+      $sql = "DELETE FROM oc_authtoken WHERE uid = ? AND type = ? AND password IS NULL;";
+      $stmt = \OC::$server->getDatabaseConnection()->prepare($sql);
+      $stmt->bindParam(1, $username, \PDO::PARAM_STR);
+      $stmt->bindParam(2, $tokenType, \PDO::PARAM_INT);
+
+      $stmt->execute();
+    }
+  }
+
+
+  ## Setters/Getters
+  /**
+   * @return string
+   */
+  public function getAppName(): string {
+    return $this->appName;
+  }
+
+  /**
+   * @return string
+   */
+  public function getCasVersion(): string {
+    return $this->casVersion;
+  }
+
+  /**
+   * @return string
+   */
+  public function getCasHostname(): string {
+    return $this->casHostname;
+  }
+
+  /**
+   * @return int
+   */
+  public function getCasPort(): int {
+    return $this->casPort;
+  }
+
+  /**
+   * @return string
+   */
+  public function getCasPath(): string {
+    return $this->casPath;
+  }
+
+  private function getServiceBasedUrl(): string {
+    $httpProtocol = \OC::$server->getConfig()
+      ->getSystemValue('overwriteprotocol', 'https');
+    $currentUrl = $_SERVER['SERVER_NAME'];
+
+    if (!strpos($currentUrl, ':') && (int) $_SERVER['SERVER_PORT'] !== 80) {
+      $currentUrl .= ':' . $_SERVER['SERVER_PORT'];
     }
 
-    /**
-     * Register Login
-     *
-     */
-    public function registerLogIn()
-    {
-
-        $loginButtonLabel = $this->config->getAppValue($this->appName, 'cas_login_button_label', 'CAS Login');
-
-        // Login Button handling
-        if (strlen($loginButtonLabel) <= 0) {
-
-            $loginButtonLabel = 'CAS Login';
-        }
-
-        $this->unregisterLogin();
-
-        if ($this->isNotNextcloud()) {
-
-            /** @var array $loginAlternatives */
-            /*$loginAlternatives = $this->config->getSystemValue('login.alternatives', []);
-
-            $loginAlreadyRegistered = FALSE;
-
-            foreach ($loginAlternatives as $key => $loginAlternative) {
-
-                if (isset($loginAlternative['name']) && $loginAlternative['name'] === $loginButtonLabel) {
-
-                    $loginAlternatives[$key]['href'] = $this->linkToRoute($this->appName . '.authentication.casLogin');
-                    $this->config->setSystemValue('login.alternatives', $loginAlternatives);
-                    $loginAlreadyRegistered = TRUE;
-                }
-            }
-
-            if (!$loginAlreadyRegistered) {*/
-
-            $loginAlternatives[] = ['href' => $this->linkToRoute($this->appName . '.authentication.casLogin'), 'name' => $loginButtonLabel, 'img' => $this->appManager->getAppWebPath($this->appName).'/img/cas-logo.png'];
-
-            $this->config->setSystemValue('login.alternatives', $loginAlternatives);
-            #}
-        } else {
-
-            #$this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS Nextcloud " . $version[0] . "." . $version[1] . "." . $version[2] . "." . " detected.");
-            \OC_App::registerLogIn(array('href' => $this->linkToRoute($this->appName . '.authentication.casLogin'), 'name' => $loginButtonLabel));
-        }
-    }
-
-    /**
-     * UnregisterLogin
-     */
-    public function unregisterLogin()
-    {
-
-        $loginButtonLabel = $this->config->getAppValue($this->appName, 'cas_login_button_label', 'CAS Login');
-
-        // Login Button handling
-        if (strlen($loginButtonLabel) <= 0) {
-
-            $loginButtonLabel = 'CAS Login';
-        }
-
-        if ($this->isNotNextcloud()) {
-
-            $loginAlternatives = $this->config->getSystemValue('login.alternatives', []);
-
-            foreach ($loginAlternatives as $key => $loginAlternative) {
-
-                if (isset($loginAlternative['name']) && ($loginAlternative['name'] === $loginButtonLabel || $loginAlternative['name'] === 'CAS Login')) {
-
-                    unset($loginAlternatives[$key]);
-                }
-            }
-
-            $this->config->setSystemValue('login.alternatives', $loginAlternatives);
-        }
-    }
-
-    /**
-     * @return bool
-     */
-    public function isSetupValid()
-    {
-
-        $casHostname = $this->config->getAppValue($this->appName, 'cas_server_hostname');
-        $casPort = intval($this->config->getAppValue($this->appName, 'cas_server_port'));
-        $casPath = $this->config->getAppValue($this->appName, 'cas_server_path');
-
-        if (is_string($casHostname) && strlen($casHostname) > 1 && is_int($casPort) && $casPort > 1 && is_string($casPath) && strpos($casPath, "/") === 0) {
-
-            return TRUE;
-        }
-
-        return FALSE;
-    }
-
-    /**
-     * Create a link to $route with URLGenerator.
-     *
-     * @param string $route
-     * @param array $arguments
-     * @return string
-     */
-    public function linkToRoute($route, $arguments = array())
-    {
-
-        return $this->urlGenerator->linkToRoute($route, $arguments);
-    }
-
-    /**
-     * Create an absolute link to $route with URLGenerator.
-     *
-     * @param string $route
-     * @param array $arguments
-     * @return string
-     */
-    public function linkToRouteAbsolute($route, $arguments = array())
-    {
-
-        return $this->urlGenerator->linkToRouteAbsolute($route, $arguments);
-    }
-
-    /**
-     * Create an url relative to owncloud host
-     *
-     * @param string $url
-     * @return mixed
-     */
-    public function getAbsoluteURL($url)
-    {
-
-        return $this->urlGenerator->getAbsoluteURL($url);
-    }
-
-    /**
-     * @return boolean
-     */
-    public function isCasInitialized()
-    {
-        return $this->casInitialized;
-    }
-
-    /**
-     * This method is used to append query parameters to an url. Since the url
-     * might already contain parameter it has to be detected and to build a proper
-     * URL
-     *
-     * @param string $url base url to add the query params to
-     * @param string $query params in query form with & separated
-     *
-     * @return string url with query params
-     */
-    private function buildQueryUrl($url, $query)
-    {
-        $url .= (strstr($url, '?') === false) ? '?' : '&';
-        $url .= $query;
-        return $url;
-    }
-
-
-    /**
-     * Test if the client’s IP adress is in our local range
-     *
-     * @param string|array $internalIps
-     * @return bool TRUE|FALSE
-     */
-    private function isIpInLocalRange($internalIps)
-    {
-
-        if (is_string($internalIps)) {
-
-            $internalIps = explode(',', $internalIps);
-        }
-
-        $remoteAddress = $_SERVER['REMOTE_ADDR'];
-
-        $proxyHeader = "HTTP_X_FORWARDED_FOR";
-
-        # Header can contain multiple IP-s of proxies that are passed through.
-        # Only the IP added by the last proxy (last IP in the list) can be trusted.
-        if (array_key_exists($proxyHeader, $_SERVER)) {
-
-            $explodedProxyHeader = explode(",", $_SERVER[$proxyHeader]);
-            $proxyIp = trim(end($explodedProxyHeader));
-
-            if (filter_var($proxyIp, FILTER_VALIDATE_IP)) {
-
-                $remoteAddress = $proxyIp;
-            }
-        }
-
-        # Check enforce IP ranges for acceptedStrength attribute
-        foreach ($internalIps as $internalIp) {
-
-            $internalIpRanges = explode('-', $internalIp);
-
-            if (isset($internalIpRanges[0])) {
-
-                if (isset($internalIpRanges[1])) {
-
-                    $baseIpComponents = explode('.', $internalIpRanges[0]);
-
-                    $baseIp = $baseIpComponents[0] . '.' . $baseIpComponents[1] . '.';
-
-                    $additionalIpComponents = explode('.', $internalIpRanges[1]);
-
-                    if (isset($additionalIpComponents[1]) && $additionalIpComponents[0]) {
-
-                        # We have a two part range here (eg. 127.0.0.1-1.19) which means, we have to cover 127.0.0.1-127.0.0.254 and 127.0.1.1-127.0.1.19
-
-                        for ($ipThirdPart = intval($baseIpComponents[2]); $ipThirdPart <= intval($additionalIpComponents[0]); $ipThirdPart++) {
-
-                            if ($ipThirdPart !== intval($additionalIpComponents[0])) {
-
-                                $ipFourthPartMax = 254;
-                            } else {
-
-                                $ipFourthPartMax = intval($additionalIpComponents[1]);
-                            }
-
-                            for ($ipFourthPart = intval($baseIpComponents[3]); $ipFourthPart <= $ipFourthPartMax; $ipFourthPart++) {
-
-                                $endIp = $baseIp . $ipThirdPart . '.' . $ipFourthPart;
-
-                                #$this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS Enforce Login IP checked: " . $endIp);
-
-                                if ($remoteAddress === $endIp) {
-
-                                    return TRUE;
-
-                                    /*if ($this->cas_ecas_accepted_strengths !== '') {
-
-                                        $this->cas_ecas_accepted_strengths = 'BASIC';
-                                        $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS ECAS AcceptedStrength Level is forced to BASIC, because the user is in the internal network. Test Address: " . $endIp . " | Users Remote Address: " . $remoteAddress);
-                                    }*/
-                                }
-                            }
-                        }
-
-                    } elseif ($additionalIpComponents[0]) {
-
-                        # We have a one part range here (eg. 127.0.0.1-19)
-
-                        $newIp = $baseIp . $baseIpComponents[2] . '.';
-
-                        for ($ipFourthPart = intval($baseIpComponents[3]); $ipFourthPart <= intval($additionalIpComponents[0]); $ipFourthPart++) {
-
-                            $endIp = $newIp . $ipFourthPart;
-
-                            if ($remoteAddress === $endIp) {
-
-                                return TRUE;
-
-                                /*if ($this->cas_ecas_accepted_strengths !== '') {
-
-                                    $this->cas_ecas_accepted_strengths = 'BASIC';
-                                    $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS ECAS AcceptedStrength is forced to BASIC, because the user is in the internal network. Test Address: " . $endIp . " | Users Remote Address: " . $remoteAddress);
-                                }*/
-                            }
-                        }
-                    }
-                } else {
-
-                    # Single IP-Adress given
-                    if ($remoteAddress === $internalIpRanges[0]) {
-
-                        return TRUE;
-
-                        /*if ($this->cas_ecas_accepted_strengths !== '') {
-
-                            $this->cas_ecas_accepted_strengths = 'BASIC';
-                            $this->loggingService->write(\OCA\UserCas\Service\LoggingService::DEBUG, "phpCAS ECAS AcceptedStrength is forced to BASIC, because the user is in the internal network. Test Address: " . $internalIpRanges[0] . " | Users Remote Address: " . $remoteAddress);
-                        }*/
-                    }
-                }
-            }
-        }
-
-        return FALSE;
-    }
-
-    /**
-     * Callback function for CAS singleSignOut call
-     *
-     * @author Vincent <https://github.com/pingou2712>
-     *
-     * @param string $ticket Ticket Object
-     */
-    public function casSingleSignOut($ticket)
-    {
-        // Extract the userID from the SAML Request
-        $decodedLogoutRequest = urldecode($_POST['logoutRequest']);
-        preg_match(
-            "|<saml:NameID[^>]*>(.*)</saml:NameID>|",
-            $decodedLogoutRequest, $tick, PREG_OFFSET_CAPTURE, 3
-        );
-        $wrappedSamlNameId = preg_replace(
-            '|<saml:NameID[^>]*>|', '', $tick[0][0]
-        );
-        $nameId = preg_replace(
-            '|</saml:NameID>|', '', $wrappedSamlNameId
-        );
-
-        //Kill Session Of UserID:
-        $this->killSessionUserName($nameId);
-    }
-
-    /**
-     * Kill the username's session.
-     *
-     * @author Vincent <https://github.com/pingou2712>
-     * @author Felix Rupp <kontakt@felixrupp.com>
-     *
-     * @param string $username The username of the user.
-     * @return NULL
-     */
-    private function killSessionUserName($username)
-    {
-
-        if ($this->userManager->userExists($username)) {
-
-            $tokenType = IToken::TEMPORARY_TOKEN;
-
-            $sql = "DELETE FROM oc_authtoken WHERE uid = ? AND type = ? AND password IS NULL;";
-            $stmt = \OC::$server->getDatabaseConnection()->prepare($sql);
-            $stmt->bindParam(1, $username, \PDO::PARAM_STR);
-            $stmt->bindParam(2, $tokenType, \PDO::PARAM_INT);
-
-            $stmt->execute();
-        }
-
-        return NULL;
-    }
-
-
-    ## Setters/Getters
-
-    /**
-     * @return string
-     */
-    public function getAppName()
-    {
-        return $this->appName;
-    }
-
-    /**
-     * @return string
-     */
-    public function getCasVersion()
-    {
-        return $this->casVersion;
-    }
-
-    /**
-     * @return string
-     */
-    public function getCasHostname()
-    {
-        return $this->casHostname;
-    }
-
-    /**
-     * @return int
-     */
-    public function getCasPort()
-    {
-        return $this->casPort;
-    }
-
-    /**
-     * @return string
-     */
-    public function getCasPath()
-    {
-        return $this->casPath;
-    }
-
-    private function getServiceBasedUrl(): string {
-        $httpProtocol = \OC::$server->getConfig()->getSystemValue('overwriteprotocol', 'https');
-        $currentUrl = $_SERVER['SERVER_NAME'];
-
-        if (!strpos($currentUrl, ':') && (int)$_SERVER['SERVER_PORT'] !== 80) {
-            $currentUrl .= ':' . $_SERVER['SERVER_PORT'];
-        }
-
-        return $httpProtocol . "://" . $currentUrl;
-    }
+    return $httpProtocol . "://" . $currentUrl;
+  }
 }

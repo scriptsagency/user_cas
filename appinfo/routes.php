@@ -23,12 +23,25 @@
 
 namespace OCA\UserCAS\AppInfo;
 
-/** @var \OCA\UserCAS\AppInfo\Application $application */
-$application = new \OCA\UserCAS\AppInfo\Application();
-$application->registerRoutes($this, array(
-    'routes' => [
-        array('name' => 'settings#saveSettings', 'url' => '/settings/save', 'verb' => 'POST'),
-        array('name' => 'authentication#casLogin', 'url' => '/login', 'verb' => 'GET'),
-        array('name' => 'authentication#casLogout', 'url' => '/login', 'verb' => 'POST')
+/**
+ * Routes for the user_cas app
+ */
+return [
+  'routes' => [
+    [
+      'name' => 'settings#saveSettings',
+      'url' => '/settings/save',
+      'verb' => 'POST',
+    ],
+    [
+      'name' => 'authentication#casLogin', // This will be registered as 'user_cas.authentication.casLogin'
+      'url' => '/login',
+      'verb' => 'GET'
+    ],
+    [
+      'name' => 'authentication#casLogout', // This will be registered as 'user_cas.authentication.casLogout'
+      'url' => '/login',
+      'verb' => 'POST'
     ]
-));
+  ]
+];

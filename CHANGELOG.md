@@ -1,6 +1,18 @@
 CHANGELOG
 =========
 
+Version 1.12.0
+--------------
+
+* Add compatibility to Nextcloud 31 with PHP 8.4
+* Change phpCAS library from jasig/phpcas to apereo/phpcas, due to the former not being maintained
+* Refactor the code to be compatible with Nextcloud 31
+* Streamlined the code to be simpler and focused on the main logic: login
+* Replace not maintained composer library EcasPhpCASParser with a service buit in the code
+* Drop support for Owncloud
+* Drop support for Import CLI
+
+
 Version 1.11.0
 --------------
 

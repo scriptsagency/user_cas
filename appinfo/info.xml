@@ -1,14 +1,15 @@
 <?xml version="1.0"?>
-<info>
+<info xmlns:xsi= "http://www.w3.org/2001/XMLSchema-instance"
+	  xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
     <id>user_cas</id>
     <name>CAS user and group backend</name>
-    <description>This app provides in-depth features to authenticate and authorize users against a [jasig/apereo Central Authentication Server (CAS)](https://www.apereo.org/projects/cas). The app provides all necessary options needed to connect to your CAS instance and also advanced features to manage the groups accessible by your CAS infrastructure to implement an authorization feature. This version supports ECAS instances used by the European Commission. Additionally this version supports ActiveDirectory (LDAP) import via commandline. Commercial support for user_cas is available through ownCloud GmbH and myself personally.</description>
-    <summary>Authenticate users against an jasig/apereo CAS Server (https://github.com/apereo/cas)</summary>
+    <description>This app provides in-depth features to authenticate and authorize users against a [apereo Central Authentication Server (CAS)](https://www.apereo.org/projects/cas). The app provides all necessary options needed to connect to your CAS instance and also advanced features to manage the groups accessible by your CAS infrastructure to implement an authorization feature. This version supports ECAS instances used by the European Commission. Additionally this version supports ActiveDirectory (LDAP) import via commandline. Commercial support for user_cas is available through ownCloud GmbH and myself personally.</description>
+    <summary>Authenticate users against an apereo CAS Server (https://github.com/apereo/cas)</summary>
     <licence>AGPL</licence>
     <screenshot>https://raw.githubusercontent.com/felixrupp/user_cas/master/.github/SCREENSHOTS/splashscreen.png</screenshot>
-    <author>Felix Rupp</author>
+    <author>Adrian Marina</author>
     <namespace>UserCAS</namespace>
-    <version>1.11.0</version>
+    <version>1.12.0</version>
     <types>
         <prelogin/>
         <authentication/>
@@ -16,21 +17,20 @@
 
     <category>security</category>
 
-    <website>https://github.com/felixrupp/user_cas</website>
+    <website>https://github.com/scriptsagency/user_cas</website>
 
     <documentation>
-        <user>https://github.com/felixrupp/user_cas/blob/master/README.md</user>
-        <admin>https://github.com/felixrupp/user_cas/blob/master/README.md</admin>
-        <developer>https://github.com/felixrupp/user_cas/blob/master/README.md</developer>
+        <user>https://github.com/scriptsagency/user_cas/blob/master/README.md</user>
+        <admin>https://github.com/scriptsagency/user_cas/blob/master/README.md</admin>
+        <developer>https://github.com/scriptsagency/user_cas/blob/master/README.md</developer>
     </documentation>
 
-    <bugs>https://github.com/felixrupp/user_cas/issues</bugs>
+    <bugs>https://github.com/scriptsagency/user_cas/issues</bugs>
 
-    <repository type="git">https://github.com/felixrupp/user_cas.git</repository>
+    <repository type="git">https://github.com/scriptsagency/user_cas.git</repository>
 
     <dependencies>
-        <owncloud min-version="10.0" max-version="10.10"/>
-        <nextcloud min-version="14" max-version="25"/>
+        <nextcloud min-version="31" max-version="31"/>
     </dependencies>
 
     <commands>
@@ -41,5 +41,6 @@
 
     <settings>
         <admin>OCA\UserCAS\Panels\Admin</admin>
+        <admin-section>OCA\UserCAS\Settings\Section</admin-section>
     </settings>
 </info>
