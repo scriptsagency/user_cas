@@ -11,6 +11,7 @@ Version 1.12.0
 * Replace not maintained composer library EcasPhpCASParser with a service buit in the code
 * Drop support for Owncloud
 * Drop support for Import CLI
+* Once composer install run, update the apereo cas library for php 8.4 by applying this changes: https://github.com/apereo/phpCAS/pull/445
 
 
 Version 1.11.0
